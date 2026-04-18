@@ -1,16 +1,22 @@
 'use client'
 import { createClient } from '../lib/supabase'
-
+ 
 export default function LoginPage() {
   const supabase = createClient()
-
+ 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${location.origin}/auth/callback` }
+      options: {
+        redirectTo: `${location.origin}/`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        }
+      }
     })
   }
-
+ 
   return (
     <div style={s.wrap}>
       <div style={s.card}>
@@ -31,7 +37,7 @@ export default function LoginPage() {
     </div>
   )
 }
-
+ 
 const s = {
   wrap: {
     minHeight: '100vh',
@@ -80,6 +86,7 @@ const s = {
     boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
     transition: 'box-shadow 0.2s, transform 0.15s',
     marginBottom: 20,
+    cursor: 'pointer',
   },
   note: {
     fontSize: 11,
