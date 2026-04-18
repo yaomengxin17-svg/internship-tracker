@@ -1,26 +1,26 @@
 'use client'
 import { useState, useRef, useEffect } from 'react'
- 
+
 const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
- 
+
 function parseDate(str) {
   if (!str) return null
   const [y, m, d] = str.split('-').map(Number)
   return new Date(y, m - 1, d)
 }
- 
+
 function formatValue(date) {
   if (!date) return ''
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
- 
+
 function formatDisplay(str) {
   if (!str) return ''
   const [y, m, d] = str.split('-')
   return `${y}/${m}/${d}`
 }
- 
+
 export default function DatePicker({ value, onChange, placeholder = '选择日期' }) {
   const [open, setOpen] = useState(false)
   const [viewYear, setViewYear] = useState(() => {
@@ -32,7 +32,7 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
     return d ? d.getMonth() : new Date().getMonth()
   })
   const ref = useRef(null)
- 
+
   useEffect(() => {
     const handleClick = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false)
@@ -40,26 +40,26 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
- 
+
   useEffect(() => {
     if (open && value) {
       const d = parseDate(value)
       if (d) { setViewYear(d.getFullYear()); setViewMonth(d.getMonth()) }
     }
   }, [open])
- 
+
   const today = new Date(); today.setHours(0,0,0,0)
   const selected = parseDate(value)
- 
+
   const firstDay = new Date(viewYear, viewMonth, 1)
   const startOffset = (firstDay.getDay() + 6) % 7
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
- 
+
   const cells = []
   for (let i = 0; i < startOffset; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
   while (cells.length % 7 !== 0) cells.push(null)
- 
+
   const prevMonth = () => {
     if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1) }
     else setViewMonth(m => m - 1)
@@ -68,20 +68,20 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
     if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1) }
     else setViewMonth(m => m + 1)
   }
- 
+
   const selectDay = (day) => {
     if (!day) return
     const d = new Date(viewYear, viewMonth, day)
     onChange(formatValue(d))
     setOpen(false)
   }
- 
+
   const clear = (e) => {
     e.stopPropagation()
-    onChange('')
+    onChange(null)
     setOpen(false)
   }
- 
+
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%' }}>
       <div
@@ -99,7 +99,7 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
         <span>{value ? formatDisplay(value) : placeholder}</span>
         <span style={{ fontSize: 14, color: '#aaa' }}>📅</span>
       </div>
- 
+
       {open && (
         <div style={s.popup}>
           {/* Header */}
@@ -108,13 +108,13 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
             <span style={s.monthLabel}>{viewYear}年 {MONTHS[viewMonth]}</span>
             <button style={s.navBtn} onClick={nextMonth}>›</button>
           </div>
- 
+
           {/* Weekdays */}
           <div style={s.grid}>
             {WEEKDAYS.map(w => (
               <div key={w} style={s.weekday}>{w}</div>
             ))}
- 
+
             {/* Days */}
             {cells.map((day, i) => {
               if (!day) return <div key={`e${i}`} />
@@ -137,7 +137,7 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
               )
             })}
           </div>
- 
+
           {/* Footer */}
           <div style={s.footer}>
             <button style={s.clearBtn} onClick={clear}>清除</button>
@@ -153,7 +153,7 @@ export default function DatePicker({ value, onChange, placeholder = '选择日�
     </div>
   )
 }
- 
+
 const s = {
   input: {
     padding: '9px 12px',
@@ -256,4 +256,3 @@ const s = {
     fontWeight: 600,
   },
 }
- 
