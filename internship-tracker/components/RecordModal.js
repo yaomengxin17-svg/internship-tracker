@@ -1,207 +1,369 @@
 'use client'
-import { useState } from 'react'
-import DatePicker from './DatePicker'
+import { useState, useEffect } from 'react'
+import { createClient } from '../lib/supabase'
+import RecordModal from './RecordModal'
 
 const INTERNSHIP_TYPES = ['日常实习', '暑期实习', '训练营']
 const DEFAULT_POSITIONS = ['游戏策划大类', '关卡策划', '系统策划', '任务策划', '叙事策划', '其他岗位']
-const INTERVIEW_STATUS = ['待定', '通过', '不通过']
-const EXAM_STATUS = ['放弃', '迟交', '待定', '通过', '不通过']
-
-const CHINA_CITIES = ['北京','上海','广州','深圳','杭州','成都','武汉','南京','西安','重庆','天津','苏州','长沙','厦门','青岛','合肥','郑州','济南','大连','宁波','无锡','福州','昆明','哈尔滨','沈阳','贵阳','南昌','太原','石家庄','海口','三亚','其他城市']
-
-const emptyForm = () => ({
-  company: '',
-  location: '',
-  team: '',
-  intern_type: INTERNSHIP_TYPES[0],
-  position_type: DEFAULT_POSITIONS[0],
-  custom_position: '',
-  submit_date: null,
-  has_exam: '无',
-  exam_date: null,
-  exam_status: '待定',
-  interview1_date: null,
-  interview1_status: '待定',
-  interview2_date: null,
-  interview2_status: '待定',
-  interview3_date: null,
-  interview3_status: '待定',
-})
-
-const EXAM_COLORS = {
-  '放弃': { active: { background:'rgba(158,158,158,0.2)', borderColor:'#9E9E9E', color:'#616161' }},
-  '迟交': { active: { background:'rgba(255,152,0,0.15)', borderColor:'#FF9800', color:'#E65100' }},
-  '待定': { active: { background:'rgba(189,189,189,0.15)', borderColor:'#BDBDBD', color:'#666' }},
-  '通过': { active: { background:'rgba(76,175,80,0.15)', borderColor:'#4CAF50', color:'#2E7D32' }},
-  '不通过': { active: { background:'rgba(229,115,115,0.15)', borderColor:'#E57373', color:'#C62828' }},
+const EXAM_STATUS_COLORS = {
+  '放弃': { bg: 'rgba(158,158,158,0.15)', color: '#616161' },
+  '迟交': { bg: 'rgba(255,152,0,0.12)', color: '#E65100' },
+  '待定': { bg: 'rgba(189,189,189,0.12)', color: '#888' },
+  '通过': { bg: 'rgba(76,175,80,0.12)', color: '#2E7D32' },
+  '不通过': { bg: 'rgba(229,115,115,0.12)', color: '#C62828' },
 }
-const IV_COLORS = {
-  '待定': { active: { background:'rgba(189,189,189,0.15)', borderColor:'#BDBDBD', color:'#666' }},
-  '通过': { active: { background:'rgba(76,175,80,0.15)', borderColor:'#4CAF50', color:'#2E7D32' }},
-  '不通过': { active: { background:'rgba(229,115,115,0.15)', borderColor:'#E57373', color:'#C62828' }},
+const INTERVIEW_STATUS_COLORS = {
+  '通过': { bg: 'rgba(76,175,80,0.12)', color: '#2E7D32' },
+  '不通过': { bg: 'rgba(229,115,115,0.12)', color: '#C62828' },
+  '待定': { bg: 'rgba(189,189,189,0.12)', color: '#888' },
 }
 
-function StatusBtn({ label, selected, colors, onClick }) {
-  const base = { flex:1, padding:'6px 4px', border:'1.5px solid #e0e0e0', borderRadius:6, fontSize:11, background:'#fff', fontWeight:600, color:'#aaa', cursor:'pointer', transition:'all 0.15s' }
-  const active = colors[label]?.active || {}
+function Badge({ status, colors }) {
+  const c = colors[status] || colors['待定']
   return (
-    <button style={selected ? { ...base, ...active } : base} onClick={onClick}>{label}</button>
+    <span style={{ background: c.bg, color: c.color, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
+      {status || '待定'}
+    </span>
   )
 }
 
-export default function RecordModal({ record, customPositions, onSave, onClose, onAddCustomPosition }) {
-  const [form, setForm] = useState(record ? { ...record } : emptyForm())
-  const [showAddPos, setShowAddPos] = useState(false)
-  const [newPos, setNewPos] = useState('')
-  const [saving, setSaving] = useState(false)
-  const allPositions = [...DEFAULT_POSITIONS, ...customPositions]
-
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
-
-  const handleSave = async () => {
-    if (!form.company.trim()) return
-    setSaving(true)
-    await onSave(form)
-    setSaving(false)
+function getOverallStatus(rec) {
+  const today = new Date(); today.setHours(0,0,0,0)
+  const toDate = s => {
+    if (!s) return null
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
   }
 
-  const addPos = () => {
-    const t = newPos.trim()
-    if (t && !allPositions.includes(t)) onAddCustomPosition(t)
-    setNewPos(''); setShowAddPos(false)
+  const submitDate = toDate(rec.submit_date)
+  const i1date = toDate(rec.interview1_date)
+  const i2date = toDate(rec.interview2_date)
+  const i3date = toDate(rec.interview3_date)
+
+  if ([rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '不通过'))
+    return { label: '已拒绝', color: '#E57373', dot: '#E57373' }
+  if ([rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '通过') &&
+      ![rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '不通过') &&
+      !i1date && !i2date && !i3date)
+    return { label: '已录用', color: '#4CAF50', dot: '#4CAF50' }
+
+  const hasUpcomingInterview = [i1date, i2date, i3date].some(d => d && d >= today)
+  const hasPastPendingInterview = [
+    { d: i1date, s: rec.interview1_status },
+    { d: i2date, s: rec.interview2_status },
+    { d: i3date, s: rec.interview3_status },
+  ].some(({ d, s }) => d && d < today && s === '待定')
+
+  if (hasUpcomingInterview) return { label: '面试中', color: '#3B6FA0', dot: '#3B6FA0' }
+  if (hasPastPendingInterview) return { label: '等待结果', color: '#FFB74D', dot: '#FFB74D' }
+  if (rec.has_exam === '有' && rec.exam_status === '待定') return { label: '笔试中', color: '#7B6B8D', dot: '#7B6B8D' }
+  if (!submitDate || submitDate > today) return { label: '待投递', color: '#BDBDBD', dot: '#BDBDBD' }
+  return { label: '简历筛选中', color: '#FFB74D', dot: '#FFB74D' }
+}
+
+const formatDate = d => {
+  if (!d) return null
+  const date = new Date(d)
+  return `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}`
+}
+
+export default function TrackerApp({ user }) {
+  const supabase = createClient()
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [editing, setEditing] = useState(null) // null | 'new' | record
+  const [deleteId, setDeleteId] = useState(null)
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [filterCompany, setFilterCompany] = useState('')
+  const [sortAsc, setSortAsc] = useState(false)
+  const [expandedId, setExpandedId] = useState(null)
+
+  const fetchRecords = async () => {
+    const { data } = await supabase
+      .from('internship_records')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+    setRecords(data || [])
+    setLoading(false)
   }
+
+  useEffect(() => { fetchRecords() }, [])
+
+  const handleSave = async (form) => {
+    const dateFields = ['submit_date', 'exam_date', 'interview1_date', 'interview2_date', 'interview3_date']
+    const cleaned = { ...form }
+    dateFields.forEach(f => { if (cleaned[f] === '') cleaned[f] = null })
+
+    if (editing === 'new') {
+      await supabase.from('internship_records').insert({ ...cleaned, user_id: user.id })
+    } else {
+      await supabase.from('internship_records').update(cleaned).eq('id', editing.id)
+    }
+    await fetchRecords()
+    setEditing(null)
+  }
+
+  const handleDelete = async (id) => {
+    await supabase.from('internship_records').delete().eq('id', id)
+    await fetchRecords()
+    setDeleteId(null)
+  }
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+  }
+
+  const filtered = records
+    .filter(r => {
+      if (filterCompany && !r.company.toLowerCase().includes(filterCompany.toLowerCase())) return false
+      if (filterStatus !== 'all' && getOverallStatus(r).label !== filterStatus) return false
+      return true
+    })
+    .sort((a, b) => {
+      const da = a.submit_date || ''
+      const db = b.submit_date || ''
+      return sortAsc ? da.localeCompare(db) : db.localeCompare(da)
+    })
+
+  const stats = {
+    total: records.length,
+    active: records.filter(r => ['面试中','等待结果','笔试中','简历筛选中'].includes(getOverallStatus(r).label)).length,
+    offer: records.filter(r => getOverallStatus(r).label === '已录用').length,
+    rejected: records.filter(r => getOverallStatus(r).label === '已拒绝').length,
+  }
+
+  const statusOptions = ['all','待投递','简历筛选中','笔试中','面试中','等待结果','已录用','已拒绝']
+
+  if (loading) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
+      <div style={{ width:36,height:36,border:'3px solid #ddd',borderTopColor:'var(--accent)',borderRadius:'50%',animation:'spin 0.8s linear infinite' }}/>
+    </div>
+  )
 
   return (
-    <div style={s.overlay} onClick={onClose}>
-      <div style={s.modal} onClick={e => e.stopPropagation()}>
-        <h2 style={s.title}>{record ? '编辑记录' : '添加投递记录'}</h2>
-
-        {/* Basic info */}
-        <div style={s.grid2}>
-          <div style={s.fg}>
-            <label style={s.label}>公司名称 *</label>
-            <input style={s.input} value={form.company} onChange={e => set('company', e.target.value)} placeholder="输入公司名称"/>
-          </div>
-          <div style={s.fg}>
-            <label style={s.label}>公司地点</label>
-            <select style={s.input} value={form.location || ''} onChange={e => set('location', e.target.value)}>
-              <option value="">不填</option>
-              {CHINA_CITIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-          <div style={s.fg}>
-            <label style={s.label}>实习类型</label>
-            <select style={s.input} value={form.intern_type} onChange={e => set('intern_type', e.target.value)}>
-              {INTERNSHIP_TYPES.map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div style={s.fg}>
-            <label style={s.label}>项目组 / 部门</label>
-            <input style={s.input} value={form.team || ''} onChange={e => set('team', e.target.value)} placeholder="选填，如：天美L1"/>
-          </div>
-          <div style={s.fg}>
-            <label style={s.label}>
-              岗位类型
-              <button style={s.addPosBtn} onClick={() => setShowAddPos(!showAddPos)}>＋ 自定义</button>
-            </label>
-            <select style={s.input} value={form.position_type} onChange={e => set('position_type', e.target.value)}>
-              {allPositions.map(p => <option key={p}>{p}</option>)}
-            </select>
-            {showAddPos && (
-              <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                <input style={{ ...s.input, flex:1 }} placeholder="新岗位名称" value={newPos}
-                  onChange={e => setNewPos(e.target.value)} onKeyDown={e => e.key==='Enter' && addPos()}/>
-                <button style={s.addPosSave} onClick={addPos}>添加</button>
-              </div>
-            )}
-            {form.position_type === '其他岗位' && (
-              <input style={{ ...s.input, marginTop:8 }} placeholder="填写具体岗位名称"
-                value={form.custom_position} onChange={e => set('custom_position', e.target.value)}/>
-            )}
-          </div>
-          <div style={s.fg}>
-            <label style={s.label}>投递时间</label>
-            <DatePicker value={form.submit_date} onChange={v => set('submit_date', v)} placeholder="选择投递日期"/>
-          </div>
+    <div style={s.container}>
+      {/* Header */}
+      <div style={s.header}>
+        <div>
+          <h1 style={s.title}>📋 实习投递追踪</h1>
+          <p style={s.sub}>{user.user_metadata?.full_name || user.email} · 管理你的实习申请进度</p>
         </div>
-
-        {/* Exam */}
-        <div style={s.section}>
-          <h3 style={s.sectionTitle}>✏️ 笔试记录</h3>
-          <div style={{ display:'flex', gap:12, alignItems:'flex-start', flexWrap:'wrap' }}>
-            <div style={{ ...s.fg, minWidth:100 }}>
-              <label style={s.smallLabel}>笔试记录</label>
-              <select style={s.input} value={form.has_exam} onChange={e => set('has_exam', e.target.value)}>
-                <option>无</option>
-                <option>有</option>
-              </select>
-            </div>
-            {form.has_exam === '有' && (<>
-              <div style={{ ...s.fg, minWidth:140 }}>
-                <label style={s.smallLabel}>笔试日期</label>
-                <DatePicker value={form.exam_date} onChange={v => set('exam_date', v)} placeholder="选择日期"/>
-              </div>
-              <div style={{ ...s.fg, flex:2, minWidth:220 }}>
-                <label style={s.smallLabel}>笔试结果</label>
-                <div style={{ display:'flex', gap:4 }}>
-                  {EXAM_STATUS.map(st => (
-                    <StatusBtn key={st} label={st} selected={form.exam_status === st} colors={EXAM_COLORS}
-                      onClick={() => set('exam_status', st)}/>
-                  ))}
-                </div>
-              </div>
-            </>)}
-          </div>
-        </div>
-
-        {/* Interviews */}
-        <div style={s.section}>
-          <h3 style={s.sectionTitle}>🎤 面试记录</h3>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12 }}>
-            {[1,2,3].map(n => (
-              <div key={n} style={s.ivCard}>
-                <div style={s.ivLabel}>{['一','二','三'][n-1]}面</div>
-                <label style={s.smallLabel}>面试日期</label>
-                <DatePicker value={form[`interview${n}_date`]} onChange={v => set(`interview${n}_date`, v)} placeholder="选择日期"/>
-                <label style={{ ...s.smallLabel, marginTop:8 }}>面试结果</label>
-                <div style={{ display:'flex', gap:4 }}>
-                  {INTERVIEW_STATUS.map(st => (
-                    <StatusBtn key={st} label={st} selected={form[`interview${n}_status`] === st} colors={IV_COLORS}
-                      onClick={() => set(`interview${n}_status`, st)}/>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={s.actions}>
-          <button style={s.cancelBtn} onClick={onClose}>取消</button>
-          <button style={s.saveBtn} onClick={handleSave} disabled={saving}>
-            {saving ? '保存中...' : record ? '保存修改' : '添加记录'}
-          </button>
+        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+          <button style={s.addBtn} onClick={() => setEditing('new')}>＋ 添加记录</button>
+          <button style={s.signOutBtn} onClick={handleSignOut} title="退出登录">退出</button>
         </div>
       </div>
+
+      {/* Stats */}
+      <div style={s.statsRow}>
+        {[
+          { label:'总计投递', value:stats.total, color:'#3B6FA0' },
+          { label:'进行中', value:stats.active, color:'#FFB74D' },
+          { label:'已录用', value:stats.offer, color:'#4CAF50' },
+          { label:'已拒绝', value:stats.rejected, color:'#E57373' },
+        ].map(st => (
+          <div key={st.label} style={{ ...s.statCard, borderTop:`3px solid ${st.color}` }}>
+            <div style={{ ...s.statValue, color:st.color }}>{st.value}</div>
+            <div style={s.statLabel}>{st.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div style={s.filterRow}>
+        <input
+          style={s.searchInput}
+          placeholder="🔍 搜索公司..."
+          value={filterCompany}
+          onChange={e => setFilterCompany(e.target.value)}
+        />
+        <select style={s.filterSelect} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+          {statusOptions.map(o => <option key={o} value={o}>{o === 'all' ? '全部状态' : o}</option>)}
+        </select>
+        <button style={s.sortBtn} onClick={() => setSortAsc(!sortAsc)}>
+          投递时间 {sortAsc ? '↑' : '↓'}
+        </button>
+      </div>
+
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <div style={s.empty}>
+          <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
+          <p style={{ color:'var(--text-muted)', fontSize:15 }}>
+            {records.length === 0 ? '还没有投递记录，点击"添加记录"开始吧！' : '没有匹配的记录'}
+          </p>
+        </div>
+      ) : (
+        <div style={s.tableWrap}>
+          <table style={s.table}>
+            <thead>
+              <tr>
+                {['公司名称','地点','实习类型','岗位','项目组','投递时间','笔试','一面','二面','三面','当前状态','操作'].map(h => (
+                  <th key={h} style={s.th}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((rec, idx) => {
+                const status = getOverallStatus(rec)
+                const isExpanded = expandedId === rec.id
+                const rowBg = idx%2===0 ? 'transparent' : 'rgba(59,111,160,0.025)'
+                return (
+                  <>
+                    <tr key={rec.id} style={{ background: rowBg, cursor:'pointer', animation:'fadeIn 0.3s ease' }}
+                      onClick={() => setExpandedId(isExpanded ? null : rec.id)}>
+                      <td style={s.td}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ width:8,height:8,borderRadius:'50%',background:status.dot,flexShrink:0 }}/>
+                          <span style={{ fontWeight:700 }}>{rec.company}</span>
+                          <span style={{ fontSize:11, color:'#bbb', marginLeft:2 }}>{isExpanded ? '▲' : '▼'}</span>
+                        </div>
+                      </td>
+                      <td style={s.td}>{rec.location ? <span style={s.locationBadge}>📍 {rec.location}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}><span style={s.typeBadge}>{rec.intern_type}</span></td>
+                      <td style={s.td}>
+                        <span style={s.posBadge}>
+                          {rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}
+                        </span>
+                      </td>
+                      <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>{formatDate(rec.submit_date) || <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>
+                        {rec.has_exam === '有' ? (
+                          <div>
+                            {rec.exam_date && <div style={s.dateSmall}>{formatDate(rec.exam_date)}</div>}
+                            <Badge status={rec.exam_status || '待定'} colors={EXAM_STATUS_COLORS}/>
+                          </div>
+                        ) : <span style={{ color:'#ccc' }}>—</span>}
+                      </td>
+                      {[1,2,3].map(n => (
+                        <td key={n} style={s.td}>
+                          {rec[`interview${n}_date`] ? (
+                            <div>
+                              <div style={s.dateSmall}>{formatDate(rec[`interview${n}_date`])}</div>
+                              <Badge status={rec[`interview${n}_status`] || '待定'} colors={INTERVIEW_STATUS_COLORS}/>
+                            </div>
+                          ) : <span style={{ color:'#ccc' }}>—</span>}
+                        </td>
+                      ))}
+                      <td style={s.td}>
+                        <span style={{ background:'rgba(59,111,160,0.08)', color:status.color, padding:'3px 10px', borderRadius:6, fontSize:12, fontWeight:700, whiteSpace:'nowrap' }}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td style={s.td}>
+                        <div style={{ display:'flex', gap:6 }} onClick={e => e.stopPropagation()}>
+                          <button style={s.editBtn} onClick={() => setEditing(rec)}>编辑</button>
+                          <button style={s.delBtn} onClick={() => setDeleteId(rec.id)}>删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${rec.id}-detail`} style={{ background: rowBg }}>
+                        <td colSpan={12} style={{ padding:'0 16px 16px 32px' }}>
+                          <div style={s.detailPanel}>
+                            <div style={s.detailGrid}>
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>公司名称</span>
+                                <span style={s.detailValue}>{rec.company}</span>
+                              </div>
+                              {rec.location && <div style={s.detailItem}>
+                                <span style={s.detailLabel}>公司地点</span>
+                                <span style={s.detailValue}>📍 {rec.location}</span>
+                              </div>}
+                              {rec.team && <div style={s.detailItem}>
+                                <span style={s.detailLabel}>项目组 / 部门</span>
+                                <span style={s.detailValue}>{rec.team}</span>
+                              </div>}
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>实习类型</span>
+                                <span style={s.detailValue}>{rec.intern_type}</span>
+                              </div>
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>岗位类型</span>
+                                <span style={s.detailValue}>{rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}</span>
+                              </div>
+                              {rec.job_url && <div style={{ ...s.detailItem, gridColumn:'1/-1' }}>
+                                <span style={s.detailLabel}>岗位链接</span>
+                                <a href={rec.job_url} target="_blank" rel="noopener noreferrer" style={s.jobLink}>
+                                  🔗 {rec.job_url}
+                                </a>
+                              </div>}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Delete confirm */}
+      {deleteId && (
+        <div style={s.overlay} onClick={() => setDeleteId(null)}>
+          <div style={s.confirmBox} onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize:15, marginBottom:20, lineHeight:1.6 }}>确定要删除这条记录吗？此操作不可撤销。</p>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button style={s.cancelBtn} onClick={() => setDeleteId(null)}>取消</button>
+              <button style={s.delBtnLg} onClick={() => handleDelete(deleteId)}>确认删除</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit/Add modal */}
+      {editing && (
+        <RecordModal
+          record={editing === 'new' ? null : editing}
+          customPositions={customPositions}
+          onSave={handleSave}
+          onClose={() => setEditing(null)}
+          onAddCustomPosition={pos => setCustomPositions(prev => [...prev, pos])}
+        />
+      )}
     </div>
   )
 }
 
 const s = {
+  container: { maxWidth:1200, margin:'0 auto', padding:'24px 16px', minHeight:'100vh' },
+  header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 },
+  title: { fontSize:26, fontWeight:800, letterSpacing:'-0.5px', margin:0 },
+  sub: { fontSize:13, color:'var(--text-muted)', marginTop:4 },
+  addBtn: { background:'linear-gradient(135deg,#3B6FA0,#2d5a87)', color:'#fff', border:'none', borderRadius:10, padding:'10px 22px', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(59,111,160,0.3)' },
+  signOutBtn: { background:'transparent', border:'1.5px solid var(--border)', borderRadius:8, padding:'9px 16px', fontSize:13, color:'var(--text-muted)', fontWeight:500 },
+  statsRow: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:12, marginBottom:20 },
+  statCard: { background:'#fff', borderRadius:10, padding:'16px 14px', textAlign:'center', boxShadow:'var(--shadow)' },
+  statValue: { fontSize:28, fontWeight:800 },
+  statLabel: { fontSize:12, color:'var(--text-muted)', marginTop:4, fontWeight:500 },
+  filterRow: { display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' },
+  searchInput: { flex:1, minWidth:160, padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, outline:'none', background:'#fff' },
+  filterSelect: { padding:'9px 12px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', outline:'none' },
+  sortBtn: { padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', fontWeight:600, color:'var(--accent)' },
+  tableWrap: { overflowX:'auto', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
+  table: { width:'100%', borderCollapse:'collapse', fontSize:13 },
+  th: { textAlign:'left', padding:'14px 12px', fontWeight:700, fontSize:11, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.5px', borderBottom:'2px solid var(--bg)', whiteSpace:'nowrap' },
+  td: { padding:'12px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
+  typeBadge: { background:'rgba(59,111,160,0.1)', color:'#3B6FA0', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
+  locationBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
+  posBadge: { background:'rgba(123,107,141,0.1)', color:'#7B6B8D', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
+  dateSmall: { fontSize:11, color:'#aaa', marginBottom:3 },
+  detailPanel: { background:'rgba(59,111,160,0.04)', borderRadius:10, padding:'14px 16px', border:'1px solid rgba(59,111,160,0.1)' },
+  detailGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'10px 24px' },
+  detailItem: { display:'flex', flexDirection:'column', gap:3 },
+  detailLabel: { fontSize:10, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.4px' },
+  detailValue: { fontSize:13, color:'var(--text)', fontWeight:500 },
+  jobLink: { fontSize:13, color:'var(--accent)', textDecoration:'none', wordBreak:'break-all', fontWeight:500 },
+  empty: { textAlign:'center', padding:'60px 20px', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
   overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 },
-  modal: { background:'#fff', borderRadius:18, padding:'28px 24px', width:'100%', maxWidth:620, maxHeight:'92vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.15)', animation:'slideUp 0.3s ease' },
-  title: { fontSize:20, fontWeight:800, margin:'0 0 20px', color:'var(--text)' },
-  grid2: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 },
-  fg: { display:'flex', flexDirection:'column' },
-  label: { fontSize:11, fontWeight:700, color:'var(--accent)', marginBottom:6, textTransform:'uppercase', letterSpacing:'0.4px', display:'flex', justifyContent:'space-between', alignItems:'center' },
-  smallLabel: { fontSize:11, fontWeight:600, color:'#aaa', marginBottom:4 },
-  input: { padding:'9px 12px', border:'1.5px solid #e8e8e8', borderRadius:8, fontSize:13, outline:'none', background:'#fafafa', width:'100%', boxSizing:'border-box' },
-  addPosBtn: { background:'none', border:'none', color:'var(--accent)', fontSize:11, fontWeight:700, cursor:'pointer', padding:0 },
-  addPosSave: { background:'var(--accent)', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', fontSize:12, fontWeight:600, whiteSpace:'nowrap', cursor:'pointer' },
-  section: { marginTop:22, borderTop:'1px solid #f0f0f0', paddingTop:18 },
-  sectionTitle: { fontSize:14, fontWeight:700, color:'var(--text)', margin:'0 0 14px' },
-  ivCard: { background:'#f8f9fb', borderRadius:10, padding:14 },
-  ivLabel: { fontSize:14, fontWeight:700, color:'var(--accent)', marginBottom:10, textAlign:'center' },
-  actions: { display:'flex', justifyContent:'flex-end', gap:10, marginTop:24 },
-  cancelBtn: { background:'#f5f5f5', border:'none', borderRadius:8, padding:'10px 22px', fontSize:13, fontWeight:600, color:'#666', cursor:'pointer' },
-  saveBtn: { background:'linear-gradient(135deg,#3B6FA0,#2d5a87)', color:'#fff', border:'none', borderRadius:8, padding:'10px 26px', fontSize:13, fontWeight:700, cursor:'pointer', boxShadow:'0 2px 8px rgba(59,111,160,0.3)' },
+  confirmBox: { background:'#fff', borderRadius:14, padding:28, maxWidth:360, width:'100%', boxShadow:'var(--shadow-lg)' },
+  cancelBtn: { background:'#f5f5f5', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600, color:'#666' },
+  delBtnLg: { background:'#E57373', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600 },
+  editBtn: { background:'transparent', border:'1.5px solid var(--accent)', color:'var(--accent)', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600 },
+  delBtn: { background:'transparent', border:'1.5px solid #E57373', color:'#E57373', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600 },
 }
