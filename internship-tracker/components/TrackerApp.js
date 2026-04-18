@@ -199,7 +199,7 @@ export default function TrackerApp({ user }) {
           <table style={s.table}>
             <thead>
               <tr>
-                {['公司名称','实习类型','岗位','投递时间','笔试','一面','二面','三面','当前状态','操作'].map(h => (
+                {['公司名称','地点','实习类型','岗位','项目组','投递时间','笔试','一面','二面','三面','当前状态','操作'].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
@@ -215,12 +215,14 @@ export default function TrackerApp({ user }) {
                         <span style={{ fontWeight:700 }}>{rec.company}</span>
                       </div>
                     </td>
+                    <td style={s.td}>{rec.location ? <span style={s.locationBadge}>📍 {rec.location}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
                     <td style={s.td}><span style={s.typeBadge}>{rec.intern_type}</span></td>
                     <td style={s.td}>
                       <span style={s.posBadge}>
                         {rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}
                       </span>
                     </td>
+                    <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
                     <td style={s.td}>{formatDate(rec.submit_date) || <span style={{ color:'#ccc' }}>—</span>}</td>
                     <td style={s.td}>
                       {rec.has_exam === '有' ? (
@@ -306,6 +308,7 @@ const s = {
   th: { textAlign:'left', padding:'14px 12px', fontWeight:700, fontSize:11, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.5px', borderBottom:'2px solid var(--bg)', whiteSpace:'nowrap' },
   td: { padding:'12px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
   typeBadge: { background:'rgba(59,111,160,0.1)', color:'#3B6FA0', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
+  locationBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
   posBadge: { background:'rgba(123,107,141,0.1)', color:'#7B6B8D', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
   dateSmall: { fontSize:11, color:'#aaa', marginBottom:3 },
   empty: { textAlign:'center', padding:'60px 20px', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
