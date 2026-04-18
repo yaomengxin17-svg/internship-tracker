@@ -76,7 +76,7 @@ export default function TrackerApp({ user }) {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCompany, setFilterCompany] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
-  const [customPositions, setCustomPositions] = useState([])
+  const [expandedId, setExpandedId] = useState(null)
 
   const fetchRecords = async () => {
     const { data } = await supabase
@@ -207,53 +207,95 @@ export default function TrackerApp({ user }) {
             <tbody>
               {filtered.map((rec, idx) => {
                 const status = getOverallStatus(rec)
+                const isExpanded = expandedId === rec.id
+                const rowBg = idx%2===0 ? 'transparent' : 'rgba(59,111,160,0.025)'
                 return (
-                  <tr key={rec.id} style={{ background: idx%2===0 ? 'transparent' : 'rgba(59,111,160,0.025)', animation:'fadeIn 0.3s ease' }}>
-                    <td style={s.td}>
-                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                        <span style={{ width:8,height:8,borderRadius:'50%',background:status.dot,flexShrink:0 }}/>
-                        <span style={{ fontWeight:700 }}>{rec.company}</span>
-                      </div>
-                    </td>
-                    <td style={s.td}>{rec.location ? <span style={s.locationBadge}>📍 {rec.location}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
-                    <td style={s.td}><span style={s.typeBadge}>{rec.intern_type}</span></td>
-                    <td style={s.td}>
-                      <span style={s.posBadge}>
-                        {rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}
-                      </span>
-                    </td>
-                    <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
-                    <td style={s.td}>{formatDate(rec.submit_date) || <span style={{ color:'#ccc' }}>—</span>}</td>
-                    <td style={s.td}>
-                      {rec.has_exam === '有' ? (
-                        <div>
-                          {rec.exam_date && <div style={s.dateSmall}>{formatDate(rec.exam_date)}</div>}
-                          <Badge status={rec.exam_status || '待定'} colors={EXAM_STATUS_COLORS}/>
+                  <>
+                    <tr key={rec.id} style={{ background: rowBg, cursor:'pointer', animation:'fadeIn 0.3s ease' }}
+                      onClick={() => setExpandedId(isExpanded ? null : rec.id)}>
+                      <td style={s.td}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                          <span style={{ width:8,height:8,borderRadius:'50%',background:status.dot,flexShrink:0 }}/>
+                          <span style={{ fontWeight:700 }}>{rec.company}</span>
+                          <span style={{ fontSize:11, color:'#bbb', marginLeft:2 }}>{isExpanded ? '▲' : '▼'}</span>
                         </div>
-                      ) : <span style={{ color:'#ccc' }}>—</span>}
-                    </td>
-                    {[1,2,3].map(n => (
-                      <td key={n} style={s.td}>
-                        {rec[`interview${n}_date`] ? (
+                      </td>
+                      <td style={s.td}>{rec.location ? <span style={s.locationBadge}>📍 {rec.location}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}><span style={s.typeBadge}>{rec.intern_type}</span></td>
+                      <td style={s.td}>
+                        <span style={s.posBadge}>
+                          {rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}
+                        </span>
+                      </td>
+                      <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>{formatDate(rec.submit_date) || <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>
+                        {rec.has_exam === '有' ? (
                           <div>
-                            <div style={s.dateSmall}>{formatDate(rec[`interview${n}_date`])}</div>
-                            <Badge status={rec[`interview${n}_status`] || '待定'} colors={INTERVIEW_STATUS_COLORS}/>
+                            {rec.exam_date && <div style={s.dateSmall}>{formatDate(rec.exam_date)}</div>}
+                            <Badge status={rec.exam_status || '待定'} colors={EXAM_STATUS_COLORS}/>
                           </div>
                         ) : <span style={{ color:'#ccc' }}>—</span>}
                       </td>
-                    ))}
-                    <td style={s.td}>
-                      <span style={{ background:'rgba(59,111,160,0.08)', color:status.color, padding:'3px 10px', borderRadius:6, fontSize:12, fontWeight:700, whiteSpace:'nowrap' }}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td style={s.td}>
-                      <div style={{ display:'flex', gap:6 }}>
-                        <button style={s.editBtn} onClick={() => setEditing(rec)}>编辑</button>
-                        <button style={s.delBtn} onClick={() => setDeleteId(rec.id)}>删除</button>
-                      </div>
-                    </td>
-                  </tr>
+                      {[1,2,3].map(n => (
+                        <td key={n} style={s.td}>
+                          {rec[`interview${n}_date`] ? (
+                            <div>
+                              <div style={s.dateSmall}>{formatDate(rec[`interview${n}_date`])}</div>
+                              <Badge status={rec[`interview${n}_status`] || '待定'} colors={INTERVIEW_STATUS_COLORS}/>
+                            </div>
+                          ) : <span style={{ color:'#ccc' }}>—</span>}
+                        </td>
+                      ))}
+                      <td style={s.td}>
+                        <span style={{ background:'rgba(59,111,160,0.08)', color:status.color, padding:'3px 10px', borderRadius:6, fontSize:12, fontWeight:700, whiteSpace:'nowrap' }}>
+                          {status.label}
+                        </span>
+                      </td>
+                      <td style={s.td}>
+                        <div style={{ display:'flex', gap:6 }} onClick={e => e.stopPropagation()}>
+                          <button style={s.editBtn} onClick={() => setEditing(rec)}>编辑</button>
+                          <button style={s.delBtn} onClick={() => setDeleteId(rec.id)}>删除</button>
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${rec.id}-detail`} style={{ background: rowBg }}>
+                        <td colSpan={12} style={{ padding:'0 16px 16px 32px' }}>
+                          <div style={s.detailPanel}>
+                            <div style={s.detailGrid}>
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>公司名称</span>
+                                <span style={s.detailValue}>{rec.company}</span>
+                              </div>
+                              {rec.location && <div style={s.detailItem}>
+                                <span style={s.detailLabel}>公司地点</span>
+                                <span style={s.detailValue}>📍 {rec.location}</span>
+                              </div>}
+                              {rec.team && <div style={s.detailItem}>
+                                <span style={s.detailLabel}>项目组 / 部门</span>
+                                <span style={s.detailValue}>{rec.team}</span>
+                              </div>}
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>实习类型</span>
+                                <span style={s.detailValue}>{rec.intern_type}</span>
+                              </div>
+                              <div style={s.detailItem}>
+                                <span style={s.detailLabel}>岗位类型</span>
+                                <span style={s.detailValue}>{rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}</span>
+                              </div>
+                              {rec.job_url && <div style={{ ...s.detailItem, gridColumn:'1/-1' }}>
+                                <span style={s.detailLabel}>岗位链接</span>
+                                <a href={rec.job_url} target="_blank" rel="noopener noreferrer" style={s.jobLink}>
+                                  🔗 {rec.job_url}
+                                </a>
+                              </div>}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 )
               })}
             </tbody>
@@ -311,6 +353,12 @@ const s = {
   locationBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
   posBadge: { background:'rgba(123,107,141,0.1)', color:'#7B6B8D', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
   dateSmall: { fontSize:11, color:'#aaa', marginBottom:3 },
+  detailPanel: { background:'rgba(59,111,160,0.04)', borderRadius:10, padding:'14px 16px', border:'1px solid rgba(59,111,160,0.1)' },
+  detailGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'10px 24px' },
+  detailItem: { display:'flex', flexDirection:'column', gap:3 },
+  detailLabel: { fontSize:10, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.4px' },
+  detailValue: { fontSize:13, color:'var(--text)', fontWeight:500 },
+  jobLink: { fontSize:13, color:'var(--accent)', textDecoration:'none', wordBreak:'break-all', fontWeight:500 },
   empty: { textAlign:'center', padding:'60px 20px', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
   overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 },
   confirmBox: { background:'#fff', borderRadius:14, padding:28, maxWidth:360, width:'100%', boxShadow:'var(--shadow-lg)' },
