@@ -76,6 +76,7 @@ export default function TrackerApp({ user }) {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCompany, setFilterCompany] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
+  const [customPositions, setCustomPositions] = useState([])
   const [expandedId, setExpandedId] = useState(null)
 
   const fetchRecords = async () => {
