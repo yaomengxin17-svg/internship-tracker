@@ -7,8 +7,12 @@ const DEFAULT_POSITIONS = ['游戏策划大类', '关卡策划', '系统策划',
 const INTERVIEW_STATUS = ['待定', '通过', '不通过']
 const EXAM_STATUS = ['放弃', '迟交', '待定', '通过', '不通过']
 
+const CHINA_CITIES = ['北京','上海','广州','深圳','杭州','成都','武汉','南京','西安','重庆','天津','苏州','长沙','厦门','青岛','合肥','郑州','济南','大连','宁波','无锡','福州','昆明','哈尔滨','沈阳','贵阳','南昌','太原','石家庄','海口','三亚','其他城市']
+
 const emptyForm = () => ({
   company: '',
+  location: '',
+  team: '',
   intern_type: INTERNSHIP_TYPES[0],
   position_type: DEFAULT_POSITIONS[0],
   custom_position: '',
@@ -79,10 +83,21 @@ export default function RecordModal({ record, customPositions, onSave, onClose, 
             <input style={s.input} value={form.company} onChange={e => set('company', e.target.value)} placeholder="输入公司名称"/>
           </div>
           <div style={s.fg}>
+            <label style={s.label}>公司地点</label>
+            <select style={s.input} value={form.location || ''} onChange={e => set('location', e.target.value)}>
+              <option value="">不填</option>
+              {CHINA_CITIES.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={s.fg}>
             <label style={s.label}>实习类型</label>
             <select style={s.input} value={form.intern_type} onChange={e => set('intern_type', e.target.value)}>
               {INTERNSHIP_TYPES.map(t => <option key={t}>{t}</option>)}
             </select>
+          </div>
+          <div style={s.fg}>
+            <label style={s.label}>项目组 / 部门</label>
+            <input style={s.input} value={form.team || ''} onChange={e => set('team', e.target.value)} placeholder="选填，如：天美L1"/>
           </div>
           <div style={s.fg}>
             <label style={s.label}>
