@@ -87,10 +87,14 @@ export default function TrackerApp({ user }) {
   useEffect(() => { fetchRecords() }, [])
 
   const handleSave = async (form) => {
+    const dateFields = ['submit_date', 'exam_date', 'interview1_date', 'interview2_date', 'interview3_date']
+    const cleaned = { ...form }
+    dateFields.forEach(f => { if (cleaned[f] === '') cleaned[f] = null })
+
     if (editing === 'new') {
-      await supabase.from('internship_records').insert({ ...form, user_id: user.id })
+      await supabase.from('internship_records').insert({ ...cleaned, user_id: user.id })
     } else {
-      await supabase.from('internship_records').update(form).eq('id', editing.id)
+      await supabase.from('internship_records').update(cleaned).eq('id', editing.id)
     }
     await fetchRecords()
     setEditing(null)
