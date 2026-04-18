@@ -29,7 +29,11 @@ function Badge({ status, colors }) {
 
 function getOverallStatus(rec) {
   const today = new Date(); today.setHours(0,0,0,0)
-  const toDate = s => s ? new Date(s) : null
+  const toDate = s => {
+    if (!s) return null
+    const [y, m, d] = s.split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
 
   const submitDate = toDate(rec.submit_date)
   const i1date = toDate(rec.interview1_date)
