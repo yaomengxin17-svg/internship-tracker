@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import DatePicker from './DatePicker'
 
 const INTERNSHIP_TYPES = ['日常实习', '暑期实习', '训练营']
 const DEFAULT_POSITIONS = ['游戏策划大类', '关卡策划', '系统策划', '任务策划', '叙事策划', '其他岗位']
@@ -105,7 +106,7 @@ export default function RecordModal({ record, customPositions, onSave, onClose, 
           </div>
           <div style={s.fg}>
             <label style={s.label}>投递时间</label>
-            <input style={s.input} type="date" value={form.submit_date} onChange={e => set('submit_date', e.target.value)}/>
+            <DatePicker value={form.submit_date} onChange={v => set('submit_date', v)} placeholder="选择投递日期"/>
           </div>
         </div>
 
@@ -123,7 +124,7 @@ export default function RecordModal({ record, customPositions, onSave, onClose, 
             {form.has_exam === '有' && (<>
               <div style={{ ...s.fg, minWidth:140 }}>
                 <label style={s.smallLabel}>笔试日期</label>
-                <input style={s.input} type="date" value={form.exam_date} onChange={e => set('exam_date', e.target.value)}/>
+                <DatePicker value={form.exam_date} onChange={v => set('exam_date', v)} placeholder="选择日期"/>
               </div>
               <div style={{ ...s.fg, flex:2, minWidth:220 }}>
                 <label style={s.smallLabel}>笔试结果</label>
@@ -146,9 +147,7 @@ export default function RecordModal({ record, customPositions, onSave, onClose, 
               <div key={n} style={s.ivCard}>
                 <div style={s.ivLabel}>{['一','二','三'][n-1]}面</div>
                 <label style={s.smallLabel}>面试日期</label>
-                <input style={s.input} type="date"
-                  value={form[`interview${n}_date`]}
-                  onChange={e => set(`interview${n}_date`, e.target.value)}/>
+                <DatePicker value={form[`interview${n}_date`]} onChange={v => set(`interview${n}_date`, v)} placeholder="选择日期"/>
                 <label style={{ ...s.smallLabel, marginTop:8 }}>面试结果</label>
                 <div style={{ display:'flex', gap:4 }}>
                   {INTERVIEW_STATUS.map(st => (
