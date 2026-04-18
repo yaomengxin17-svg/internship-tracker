@@ -1,10 +1,8 @@
 'use client'
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createClient } from '../lib/supabase'
 import RecordModal from './RecordModal'
 
-const INTERNSHIP_TYPES = ['日常实习', '暑期实习', '训练营']
-const DEFAULT_POSITIONS = ['游戏策划大类', '关卡策划', '系统策划', '任务策划', '叙事策划', '其他岗位']
 const EXAM_STATUS_COLORS = {
   '放弃': { bg: 'rgba(158,158,158,0.15)', color: '#616161' },
   '迟交': { bg: 'rgba(255,152,0,0.12)', color: '#E65100' },
@@ -34,50 +32,40 @@ function getOverallStatus(rec) {
     const [y, m, d] = s.split('-').map(Number)
     return new Date(y, m - 1, d)
   }
-
   const submitDate = toDate(rec.submit_date)
-  const i1date = toDate(rec.interview1_date)
-  const i2date = toDate(rec.interview2_date)
-  const i3date = toDate(rec.interview3_date)
+  const i1 = toDate(rec.interview1_date)
+  const i2 = toDate(rec.interview2_date)
+  const i3 = toDate(rec.interview3_date)
+  const statuses = [rec.interview1_status, rec.interview2_status, rec.interview3_status]
 
-  if ([rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '不通过'))
-    return { label: '已拒绝', color: '#E57373', dot: '#E57373' }
-  if ([rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '通过') &&
-      ![rec.interview1_status, rec.interview2_status, rec.interview3_status].some(s => s === '不通过') &&
-      !i1date && !i2date && !i3date)
+  if (statuses.some(s => s === '不通过')) return { label: '已拒绝', color: '#E57373', dot: '#E57373' }
+  if (statuses.some(s => s === '通过') && !statuses.some(s => s === '不通过') && !i1 && !i2 && !i3)
     return { label: '已录用', color: '#4CAF50', dot: '#4CAF50' }
-
-  const hasUpcomingInterview = [i1date, i2date, i3date].some(d => d && d >= today)
-  const hasPastPendingInterview = [
-    { d: i1date, s: rec.interview1_status },
-    { d: i2date, s: rec.interview2_status },
-    { d: i3date, s: rec.interview3_status },
-  ].some(({ d, s }) => d && d < today && s === '待定')
-
-  if (hasUpcomingInterview) return { label: '面试中', color: '#3B6FA0', dot: '#3B6FA0' }
-  if (hasPastPendingInterview) return { label: '等待结果', color: '#FFB74D', dot: '#FFB74D' }
+  if ([i1,i2,i3].some(d => d && d >= today)) return { label: '面试中', color: '#3B6FA0', dot: '#3B6FA0' }
+  if ([{d:i1,s:rec.interview1_status},{d:i2,s:rec.interview2_status},{d:i3,s:rec.interview3_status}]
+      .some(({d,s}) => d && d < today && s === '待定')) return { label: '等待结果', color: '#FFB74D', dot: '#FFB74D' }
   if (rec.has_exam === '有' && rec.exam_status === '待定') return { label: '笔试中', color: '#7B6B8D', dot: '#7B6B8D' }
   if (!submitDate || submitDate > today) return { label: '待投递', color: '#BDBDBD', dot: '#BDBDBD' }
   return { label: '简历筛选中', color: '#FFB74D', dot: '#FFB74D' }
 }
 
-const formatDate = d => {
+const fmt = d => {
   if (!d) return null
-  const date = new Date(d)
-  return `${date.getFullYear()}/${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}`
+  const [y,m,dy] = d.split('-')
+  return `${y}/${m}/${dy}`
 }
 
 export default function TrackerApp({ user }) {
   const supabase = createClient()
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
-  const [editing, setEditing] = useState(null) // null | 'new' | record
+  const [editing, setEditing] = useState(null)
   const [deleteId, setDeleteId] = useState(null)
+  const [expandedId, setExpandedId] = useState(null)
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterCompany, setFilterCompany] = useState('')
   const [sortAsc, setSortAsc] = useState(false)
   const [customPositions, setCustomPositions] = useState([])
-  const [expandedId, setExpandedId] = useState(null)
 
   const fetchRecords = async () => {
     const { data } = await supabase
@@ -92,10 +80,9 @@ export default function TrackerApp({ user }) {
   useEffect(() => { fetchRecords() }, [])
 
   const handleSave = async (form) => {
-    const dateFields = ['submit_date', 'exam_date', 'interview1_date', 'interview2_date', 'interview3_date']
+    const dateFields = ['submit_date','exam_date','interview1_date','interview2_date','interview3_date']
     const cleaned = { ...form }
-    dateFields.forEach(f => { if (cleaned[f] === '') cleaned[f] = null })
-
+    dateFields.forEach(f => { if (!cleaned[f]) cleaned[f] = null })
     if (editing === 'new') {
       await supabase.from('internship_records').insert({ ...cleaned, user_id: user.id })
     } else {
@@ -111,9 +98,7 @@ export default function TrackerApp({ user }) {
     setDeleteId(null)
   }
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-  }
+  const handleSignOut = async () => { await supabase.auth.signOut() }
 
   const filtered = records
     .filter(r => {
@@ -122,8 +107,7 @@ export default function TrackerApp({ user }) {
       return true
     })
     .sort((a, b) => {
-      const da = a.submit_date || ''
-      const db = b.submit_date || ''
+      const da = a.submit_date || '', db = b.submit_date || ''
       return sortAsc ? da.localeCompare(db) : db.localeCompare(da)
     })
 
@@ -144,7 +128,6 @@ export default function TrackerApp({ user }) {
 
   return (
     <div style={s.container}>
-      {/* Header */}
       <div style={s.header}>
         <div>
           <h1 style={s.title}>📋 实习投递追踪</h1>
@@ -152,11 +135,10 @@ export default function TrackerApp({ user }) {
         </div>
         <div style={{ display:'flex', gap:10, alignItems:'center' }}>
           <button style={s.addBtn} onClick={() => setEditing('new')}>＋ 添加记录</button>
-          <button style={s.signOutBtn} onClick={handleSignOut} title="退出登录">退出</button>
+          <button style={s.signOutBtn} onClick={handleSignOut}>退出</button>
         </div>
       </div>
 
-      {/* Stats */}
       <div style={s.statsRow}>
         {[
           { label:'总计投递', value:stats.total, color:'#3B6FA0' },
@@ -171,23 +153,14 @@ export default function TrackerApp({ user }) {
         ))}
       </div>
 
-      {/* Filters */}
       <div style={s.filterRow}>
-        <input
-          style={s.searchInput}
-          placeholder="🔍 搜索公司..."
-          value={filterCompany}
-          onChange={e => setFilterCompany(e.target.value)}
-        />
+        <input style={s.searchInput} placeholder="🔍 搜索公司..." value={filterCompany} onChange={e => setFilterCompany(e.target.value)}/>
         <select style={s.filterSelect} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           {statusOptions.map(o => <option key={o} value={o}>{o === 'all' ? '全部状态' : o}</option>)}
         </select>
-        <button style={s.sortBtn} onClick={() => setSortAsc(!sortAsc)}>
-          投递时间 {sortAsc ? '↑' : '↓'}
-        </button>
+        <button style={s.sortBtn} onClick={() => setSortAsc(!sortAsc)}>投递时间 {sortAsc ? '↑' : '↓'}</button>
       </div>
 
-      {/* Table */}
       {filtered.length === 0 ? (
         <div style={s.empty}>
           <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
@@ -211,41 +184,38 @@ export default function TrackerApp({ user }) {
                 const isExpanded = expandedId === rec.id
                 const rowBg = idx%2===0 ? 'transparent' : 'rgba(59,111,160,0.025)'
                 return (
-                  <>
-                    <tr key={rec.id} style={{ background: rowBg, cursor:'pointer', animation:'fadeIn 0.3s ease' }}
-                      onClick={() => setExpandedId(isExpanded ? null : rec.id)}>
+                  <React.Fragment key={rec.id}>
+                    <tr style={{ background:rowBg, cursor:'pointer' }} onClick={() => setExpandedId(isExpanded ? null : rec.id)}>
                       <td style={s.td}>
                         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                           <span style={{ width:8,height:8,borderRadius:'50%',background:status.dot,flexShrink:0 }}/>
                           <span style={{ fontWeight:700 }}>{rec.company}</span>
-                          <span style={{ fontSize:11, color:'#bbb', marginLeft:2 }}>{isExpanded ? '▲' : '▼'}</span>
+                          <span style={{ fontSize:10, color:'#bbb' }}>{isExpanded ? '▲' : '▼'}</span>
                         </div>
                       </td>
-                      <td style={s.td}>{rec.location ? <span style={s.locationBadge}>📍 {rec.location}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>{rec.location ? <span style={s.locBadge}>📍 {rec.location}</span> : <span style={s.dash}>—</span>}</td>
                       <td style={s.td}><span style={s.typeBadge}>{rec.intern_type}</span></td>
                       <td style={s.td}>
-                        <span style={s.posBadge}>
-                          {rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}
-                        </span>
+                        <span style={s.posBadge}>{rec.position_type === '其他岗位' ? (rec.custom_position||'其他') : rec.position_type}</span>
                       </td>
-                      <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={{ color:'#ccc' }}>—</span>}</td>
-                      <td style={s.td}>{formatDate(rec.submit_date) || <span style={{ color:'#ccc' }}>—</span>}</td>
+                      <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={s.dash}>—</span>}</td>
+                      <td style={s.td}>{fmt(rec.submit_date) || <span style={s.dash}>—</span>}</td>
                       <td style={s.td}>
                         {rec.has_exam === '有' ? (
                           <div>
-                            {rec.exam_date && <div style={s.dateSmall}>{formatDate(rec.exam_date)}</div>}
-                            <Badge status={rec.exam_status || '待定'} colors={EXAM_STATUS_COLORS}/>
+                            {rec.exam_date && <div style={s.dateSmall}>{fmt(rec.exam_date)}</div>}
+                            <Badge status={rec.exam_status||'待定'} colors={EXAM_STATUS_COLORS}/>
                           </div>
-                        ) : <span style={{ color:'#ccc' }}>—</span>}
+                        ) : <span style={s.dash}>—</span>}
                       </td>
                       {[1,2,3].map(n => (
                         <td key={n} style={s.td}>
                           {rec[`interview${n}_date`] ? (
                             <div>
-                              <div style={s.dateSmall}>{formatDate(rec[`interview${n}_date`])}</div>
-                              <Badge status={rec[`interview${n}_status`] || '待定'} colors={INTERVIEW_STATUS_COLORS}/>
+                              <div style={s.dateSmall}>{fmt(rec[`interview${n}_date`])}</div>
+                              <Badge status={rec[`interview${n}_status`]||'待定'} colors={INTERVIEW_STATUS_COLORS}/>
                             </div>
-                          ) : <span style={{ color:'#ccc' }}>—</span>}
+                          ) : <span style={s.dash}>—</span>}
                         </td>
                       ))}
                       <td style={s.td}>
@@ -261,42 +231,27 @@ export default function TrackerApp({ user }) {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr key={`${rec.id}-detail`} style={{ background: rowBg }}>
+                      <tr style={{ background:rowBg }}>
                         <td colSpan={12} style={{ padding:'0 16px 16px 32px' }}>
                           <div style={s.detailPanel}>
                             <div style={s.detailGrid}>
-                              <div style={s.detailItem}>
-                                <span style={s.detailLabel}>公司名称</span>
-                                <span style={s.detailValue}>{rec.company}</span>
-                              </div>
-                              {rec.location && <div style={s.detailItem}>
-                                <span style={s.detailLabel}>公司地点</span>
-                                <span style={s.detailValue}>📍 {rec.location}</span>
-                              </div>}
-                              {rec.team && <div style={s.detailItem}>
-                                <span style={s.detailLabel}>项目组 / 部门</span>
-                                <span style={s.detailValue}>{rec.team}</span>
-                              </div>}
-                              <div style={s.detailItem}>
-                                <span style={s.detailLabel}>实习类型</span>
-                                <span style={s.detailValue}>{rec.intern_type}</span>
-                              </div>
-                              <div style={s.detailItem}>
-                                <span style={s.detailLabel}>岗位类型</span>
-                                <span style={s.detailValue}>{rec.position_type === '其他岗位' ? (rec.custom_position || '其他') : rec.position_type}</span>
-                              </div>
-                              {rec.job_url && <div style={{ ...s.detailItem, gridColumn:'1/-1' }}>
-                                <span style={s.detailLabel}>岗位链接</span>
-                                <a href={rec.job_url} target="_blank" rel="noopener noreferrer" style={s.jobLink}>
-                                  🔗 {rec.job_url}
-                                </a>
-                              </div>}
+                              {rec.location && <div style={s.di}><span style={s.dl}>公司地点</span><span style={s.dv}>📍 {rec.location}</span></div>}
+                              {rec.team && <div style={s.di}><span style={s.dl}>项目组 / 部门</span><span style={s.dv}>{rec.team}</span></div>}
+                              <div style={s.di}><span style={s.dl}>实习类型</span><span style={s.dv}>{rec.intern_type}</span></div>
+                              <div style={s.di}><span style={s.dl}>岗位类型</span><span style={s.dv}>{rec.position_type === '其他岗位' ? (rec.custom_position||'其他') : rec.position_type}</span></div>
+                              <div style={s.di}><span style={s.dl}>投递时间</span><span style={s.dv}>{fmt(rec.submit_date)||'未填写'}</span></div>
+                              {rec.job_url && (
+                                <div style={{ ...s.di, gridColumn:'1/-1' }}>
+                                  <span style={s.dl}>岗位链接</span>
+                                  <a href={rec.job_url} target="_blank" rel="noopener noreferrer" style={s.jobLink}>🔗 {rec.job_url}</a>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </React.Fragment>
                 )
               })}
             </tbody>
@@ -304,7 +259,6 @@ export default function TrackerApp({ user }) {
         </div>
       )}
 
-      {/* Delete confirm */}
       {deleteId && (
         <div style={s.overlay} onClick={() => setDeleteId(null)}>
           <div style={s.confirmBox} onClick={e => e.stopPropagation()}>
@@ -317,7 +271,6 @@ export default function TrackerApp({ user }) {
         </div>
       )}
 
-      {/* Edit/Add modal */}
       {editing && (
         <RecordModal
           record={editing === 'new' ? null : editing}
@@ -336,35 +289,36 @@ const s = {
   header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 },
   title: { fontSize:26, fontWeight:800, letterSpacing:'-0.5px', margin:0 },
   sub: { fontSize:13, color:'var(--text-muted)', marginTop:4 },
-  addBtn: { background:'linear-gradient(135deg,#3B6FA0,#2d5a87)', color:'#fff', border:'none', borderRadius:10, padding:'10px 22px', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(59,111,160,0.3)' },
-  signOutBtn: { background:'transparent', border:'1.5px solid var(--border)', borderRadius:8, padding:'9px 16px', fontSize:13, color:'var(--text-muted)', fontWeight:500 },
+  addBtn: { background:'linear-gradient(135deg,#3B6FA0,#2d5a87)', color:'#fff', border:'none', borderRadius:10, padding:'10px 22px', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(59,111,160,0.3)', cursor:'pointer' },
+  signOutBtn: { background:'transparent', border:'1.5px solid var(--border)', borderRadius:8, padding:'9px 16px', fontSize:13, color:'var(--text-muted)', fontWeight:500, cursor:'pointer' },
   statsRow: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:12, marginBottom:20 },
   statCard: { background:'#fff', borderRadius:10, padding:'16px 14px', textAlign:'center', boxShadow:'var(--shadow)' },
   statValue: { fontSize:28, fontWeight:800 },
   statLabel: { fontSize:12, color:'var(--text-muted)', marginTop:4, fontWeight:500 },
   filterRow: { display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' },
   searchInput: { flex:1, minWidth:160, padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, outline:'none', background:'#fff' },
-  filterSelect: { padding:'9px 12px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', outline:'none' },
-  sortBtn: { padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', fontWeight:600, color:'var(--accent)' },
+  filterSelect: { padding:'9px 12px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', outline:'none', cursor:'pointer' },
+  sortBtn: { padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', fontWeight:600, color:'var(--accent)', cursor:'pointer' },
   tableWrap: { overflowX:'auto', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
   table: { width:'100%', borderCollapse:'collapse', fontSize:13 },
   th: { textAlign:'left', padding:'14px 12px', fontWeight:700, fontSize:11, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.5px', borderBottom:'2px solid var(--bg)', whiteSpace:'nowrap' },
   td: { padding:'12px', borderBottom:'1px solid #f3f4f6', verticalAlign:'middle' },
+  dash: { color:'#ccc' },
+  locBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
   typeBadge: { background:'rgba(59,111,160,0.1)', color:'#3B6FA0', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
-  locationBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
   posBadge: { background:'rgba(123,107,141,0.1)', color:'#7B6B8D', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
   dateSmall: { fontSize:11, color:'#aaa', marginBottom:3 },
-  detailPanel: { background:'rgba(59,111,160,0.04)', borderRadius:10, padding:'14px 16px', border:'1px solid rgba(59,111,160,0.1)' },
-  detailGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(180px, 1fr))', gap:'10px 24px' },
-  detailItem: { display:'flex', flexDirection:'column', gap:3 },
-  detailLabel: { fontSize:10, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.4px' },
-  detailValue: { fontSize:13, color:'var(--text)', fontWeight:500 },
+  detailPanel: { background:'rgba(59,111,160,0.04)', borderRadius:10, padding:'14px 16px', border:'1px solid rgba(59,111,160,0.1)', marginTop:4 },
+  detailGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' },
+  di: { display:'flex', flexDirection:'column', gap:3 },
+  dl: { fontSize:10, fontWeight:700, color:'var(--accent)', textTransform:'uppercase', letterSpacing:'0.4px' },
+  dv: { fontSize:13, color:'var(--text)', fontWeight:500 },
   jobLink: { fontSize:13, color:'var(--accent)', textDecoration:'none', wordBreak:'break-all', fontWeight:500 },
   empty: { textAlign:'center', padding:'60px 20px', background:'#fff', borderRadius:12, boxShadow:'var(--shadow)' },
   overlay: { position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', backdropFilter:'blur(4px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 },
   confirmBox: { background:'#fff', borderRadius:14, padding:28, maxWidth:360, width:'100%', boxShadow:'var(--shadow-lg)' },
-  cancelBtn: { background:'#f5f5f5', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600, color:'#666' },
-  delBtnLg: { background:'#E57373', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600 },
-  editBtn: { background:'transparent', border:'1.5px solid var(--accent)', color:'var(--accent)', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600 },
-  delBtn: { background:'transparent', border:'1.5px solid #E57373', color:'#E57373', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600 },
+  cancelBtn: { background:'#f5f5f5', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600, color:'#666', cursor:'pointer' },
+  delBtnLg: { background:'#E57373', color:'#fff', border:'none', borderRadius:8, padding:'9px 20px', fontSize:13, fontWeight:600, cursor:'pointer' },
+  editBtn: { background:'transparent', border:'1.5px solid var(--accent)', color:'var(--accent)', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600, cursor:'pointer' },
+  delBtn: { background:'transparent', border:'1.5px solid #E57373', color:'#E57373', borderRadius:6, padding:'4px 12px', fontSize:12, fontWeight:600, cursor:'pointer' },
 }
