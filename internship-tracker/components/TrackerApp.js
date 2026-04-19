@@ -3,25 +3,103 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '../lib/supabase'
 import RecordModal from './RecordModal'
 
-const EXAM_STATUS_COLORS = {
-  '放弃': { bg: 'rgba(158,158,158,0.15)', color: '#616161' },
-  '迟交': { bg: 'rgba(255,152,0,0.12)', color: '#E65100' },
-  '待定': { bg: 'rgba(189,189,189,0.12)', color: '#888' },
-  '通过': { bg: 'rgba(76,175,80,0.12)', color: '#2E7D32' },
-  '不通过': { bg: 'rgba(229,115,115,0.12)', color: '#C62828' },
+const EXAM_RESULT_COLOR = {
+  '通过':    { bg: '#4CAF50', border: '#4CAF50' },
+  '不通过':  { bg: '#E57373', border: '#E57373' },
+  '迟交':    { bg: '#FF9800', border: '#FF9800' },
+  '放弃':    { bg: '#9E9E9E', border: '#9E9E9E' },
+  '待定':    { bg: '#3B6FA0', border: '#3B6FA0' },
 }
-const INTERVIEW_STATUS_COLORS = {
-  '通过': { bg: 'rgba(76,175,80,0.12)', color: '#2E7D32' },
-  '不通过': { bg: 'rgba(229,115,115,0.12)', color: '#C62828' },
-  '待定': { bg: 'rgba(189,189,189,0.12)', color: '#888' },
+const IV_RESULT_COLOR = {
+  '通过':   { bg: '#4CAF50', border: '#4CAF50' },
+  '不通过': { bg: '#E57373', border: '#E57373' },
+  '待定':   { bg: '#3B6FA0', border: '#3B6FA0' },
 }
+const EMPTY_DOT = { bg: '#e0e0e0', border: '#e0e0e0' }
 
-function Badge({ status, colors }) {
-  const c = colors[status] || colors['待定']
+function TimelineDots({ rec }) {
+  const fmt = d => {
+    if (!d) return null
+    const [y,m,dy] = d.split('-')
+    return `${y}/${m}/${dy}`
+  }
+
+  const stages = [
+    {
+      key: 'exam',
+      label: '笔',
+      hasData: rec.has_exam === '有',
+      date: fmt(rec.exam_date),
+      status: rec.exam_status,
+      colors: EXAM_RESULT_COLOR,
+    },
+    { key: 'iv1', label: '一', hasData: !!rec.interview1_date, date: fmt(rec.interview1_date), status: rec.interview1_status, colors: IV_RESULT_COLOR },
+    { key: 'iv2', label: '二', hasData: !!rec.interview2_date, date: fmt(rec.interview2_date), status: rec.interview2_status, colors: IV_RESULT_COLOR },
+    { key: 'iv3', label: '三', hasData: !!rec.interview3_date, date: fmt(rec.interview3_date), status: rec.interview3_status, colors: IV_RESULT_COLOR },
+  ]
+
   return (
-    <span style={{ background: c.bg, color: c.color, padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 700 }}>
-      {status || '待定'}
-    </span>
+    <div style={{ display:'flex', alignItems:'center', gap:0 }}>
+      {stages.map((stage, i) => {
+        const active = stage.hasData
+        const color = active ? (stage.colors[stage.status] || stage.colors['待定']) : EMPTY_DOT
+        return (
+          <React.Fragment key={stage.key}>
+            {i > 0 && (
+              <div style={{ width:14, height:2, background: active ? 'rgba(59,111,160,0.2)' : '#eee', flexShrink:0 }}/>
+            )}
+            <div style={{ position:'relative' }} className="dot-wrap">
+              <div
+                title={active ? `${stage.label}面${stage.date ? `｜${stage.date}` : ''}${stage.status ? `｜${stage.status}` : ''}` : ''}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  background: active ? color.bg : '#f0f0f0',
+                  border: `2px solid ${active ? color.border : '#ddd'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: active ? '#fff' : '#bbb',
+                  cursor: active ? 'default' : 'default',
+                  transition: 'all 0.2s',
+                  flexShrink: 0,
+                  position: 'relative',
+                }}
+              >
+                {stage.label}
+                {active && stage.date && (
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginBottom: 6,
+                    background: 'rgba(30,40,60,0.92)',
+                    color: '#fff',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    fontSize: 10,
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                    opacity: 0,
+                    transition: 'opacity 0.15s',
+                    zIndex: 10,
+                  }} className="dot-tooltip">
+                    {stage.date}{stage.status ? ` · ${stage.status}` : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+          </React.Fragment>
+        )
+      })}
+      <style>{`
+        .dot-wrap:hover .dot-tooltip { opacity: 1 !important; }
+      `}</style>
+    </div>
   )
 }
 
@@ -161,6 +239,25 @@ export default function TrackerApp({ user }) {
         <button style={s.sortBtn} onClick={() => setSortAsc(!sortAsc)}>投递时间 {sortAsc ? '↑' : '↓'}</button>
       </div>
 
+      {/* 图例 */}
+      <div style={s.legend}>
+        <span style={s.legendTitle}>时间轴图例：</span>
+        {[
+          { color:'#4CAF50', label:'通过' },
+          { color:'#E57373', label:'不通过' },
+          { color:'#3B6FA0', label:'待定' },
+          { color:'#FF9800', label:'迟交' },
+          { color:'#9E9E9E', label:'放弃' },
+          { color:'#e0e0e0', label:'未填写', textColor:'#bbb' },
+        ].map(l => (
+          <div key={l.label} style={{ display:'flex', alignItems:'center', gap:4 }}>
+            <div style={{ width:12, height:12, borderRadius:'50%', background:l.color, flexShrink:0 }}/>
+            <span style={{ fontSize:11, color: l.textColor || '#666' }}>{l.label}</span>
+          </div>
+        ))}
+        <span style={{ fontSize:11, color:'#aaa', marginLeft:4 }}>（悬停圆点可查看日期）</span>
+      </div>
+
       {filtered.length === 0 ? (
         <div style={s.empty}>
           <div style={{ fontSize:48, marginBottom:12 }}>📭</div>
@@ -173,7 +270,7 @@ export default function TrackerApp({ user }) {
           <table style={s.table}>
             <thead>
               <tr>
-                {['公司名称','地点','实习类型','岗位','项目组','投递时间','笔试','一面','二面','三面','当前状态','操作'].map(h => (
+                {['公司名称','地点','实习类型','岗位','项目组','投递时间','进度','当前状态','操作'].map(h => (
                   <th key={h} style={s.th}>{h}</th>
                 ))}
               </tr>
@@ -200,24 +297,9 @@ export default function TrackerApp({ user }) {
                       </td>
                       <td style={s.td}>{rec.team ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>{rec.team}</span> : <span style={s.dash}>—</span>}</td>
                       <td style={s.td}>{fmt(rec.submit_date) || <span style={s.dash}>—</span>}</td>
-                      <td style={s.td}>
-                        {rec.has_exam === '有' ? (
-                          <div>
-                            {rec.exam_date && <div style={s.dateSmall}>{fmt(rec.exam_date)}</div>}
-                            <Badge status={rec.exam_status||'待定'} colors={EXAM_STATUS_COLORS}/>
-                          </div>
-                        ) : <span style={s.dash}>—</span>}
+                      <td style={{ ...s.td }} onClick={e => e.stopPropagation()}>
+                        <TimelineDots rec={rec}/>
                       </td>
-                      {[1,2,3].map(n => (
-                        <td key={n} style={s.td}>
-                          {rec[`interview${n}_date`] ? (
-                            <div>
-                              <div style={s.dateSmall}>{fmt(rec[`interview${n}_date`])}</div>
-                              <Badge status={rec[`interview${n}_status`]||'待定'} colors={INTERVIEW_STATUS_COLORS}/>
-                            </div>
-                          ) : <span style={s.dash}>—</span>}
-                        </td>
-                      ))}
                       <td style={s.td}>
                         <span style={{ background:'rgba(59,111,160,0.08)', color:status.color, padding:'3px 10px', borderRadius:6, fontSize:12, fontWeight:700, whiteSpace:'nowrap' }}>
                           {status.label}
@@ -232,7 +314,7 @@ export default function TrackerApp({ user }) {
                     </tr>
                     {isExpanded && (
                       <tr style={{ background:rowBg }}>
-                        <td colSpan={12} style={{ padding:'0 16px 16px 32px' }}>
+                        <td colSpan={9} style={{ padding:'0 16px 16px 32px' }}>
                           <div style={s.detailPanel}>
                             <div style={s.detailGrid}>
                               {rec.location && <div style={s.di}><span style={s.dl}>公司地点</span><span style={s.dv}>📍 {rec.location}</span></div>}
@@ -240,6 +322,10 @@ export default function TrackerApp({ user }) {
                               <div style={s.di}><span style={s.dl}>实习类型</span><span style={s.dv}>{rec.intern_type}</span></div>
                               <div style={s.di}><span style={s.dl}>岗位类型</span><span style={s.dv}>{rec.position_type === '其他岗位' ? (rec.custom_position||'其他') : rec.position_type}</span></div>
                               <div style={s.di}><span style={s.dl}>投递时间</span><span style={s.dv}>{fmt(rec.submit_date)||'未填写'}</span></div>
+                              {rec.has_exam === '有' && <div style={s.di}><span style={s.dl}>笔试</span><span style={s.dv}>{fmt(rec.exam_date)||'—'} · {rec.exam_status||'待定'}</span></div>}
+                              {rec.interview1_date && <div style={s.di}><span style={s.dl}>一面</span><span style={s.dv}>{fmt(rec.interview1_date)} · {rec.interview1_status||'待定'}</span></div>}
+                              {rec.interview2_date && <div style={s.di}><span style={s.dl}>二面</span><span style={s.dv}>{fmt(rec.interview2_date)} · {rec.interview2_status||'待定'}</span></div>}
+                              {rec.interview3_date && <div style={s.di}><span style={s.dl}>三面</span><span style={s.dv}>{fmt(rec.interview3_date)} · {rec.interview3_status||'待定'}</span></div>}
                               {rec.job_url && (
                                 <div style={{ ...s.di, gridColumn:'1/-1' }}>
                                   <span style={s.dl}>岗位链接</span>
@@ -285,17 +371,19 @@ export default function TrackerApp({ user }) {
 }
 
 const s = {
-  container: { maxWidth:1200, margin:'0 auto', padding:'24px 16px', minHeight:'100vh' },
+  container: { maxWidth:1100, margin:'0 auto', padding:'24px 16px', minHeight:'100vh' },
   header: { display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:24, flexWrap:'wrap', gap:12 },
   title: { fontSize:26, fontWeight:800, letterSpacing:'-0.5px', margin:0 },
   sub: { fontSize:13, color:'var(--text-muted)', marginTop:4 },
   addBtn: { background:'linear-gradient(135deg,#3B6FA0,#2d5a87)', color:'#fff', border:'none', borderRadius:10, padding:'10px 22px', fontSize:14, fontWeight:600, boxShadow:'0 2px 8px rgba(59,111,160,0.3)', cursor:'pointer' },
   signOutBtn: { background:'transparent', border:'1.5px solid var(--border)', borderRadius:8, padding:'9px 16px', fontSize:13, color:'var(--text-muted)', fontWeight:500, cursor:'pointer' },
-  statsRow: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:12, marginBottom:20 },
+  statsRow: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:12, marginBottom:16 },
   statCard: { background:'#fff', borderRadius:10, padding:'16px 14px', textAlign:'center', boxShadow:'var(--shadow)' },
   statValue: { fontSize:28, fontWeight:800 },
   statLabel: { fontSize:12, color:'var(--text-muted)', marginTop:4, fontWeight:500 },
-  filterRow: { display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' },
+  legend: { display:'flex', alignItems:'center', gap:12, marginBottom:12, flexWrap:'wrap', background:'#fff', borderRadius:8, padding:'8px 14px', boxShadow:'var(--shadow)' },
+  legendTitle: { fontSize:11, fontWeight:700, color:'var(--text-muted)', marginRight:4 },
+  filterRow: { display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center' },
   searchInput: { flex:1, minWidth:160, padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, outline:'none', background:'#fff' },
   filterSelect: { padding:'9px 12px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', outline:'none', cursor:'pointer' },
   sortBtn: { padding:'9px 14px', border:'1.5px solid var(--border)', borderRadius:8, fontSize:13, background:'#fff', fontWeight:600, color:'var(--accent)', cursor:'pointer' },
@@ -307,7 +395,6 @@ const s = {
   locBadge: { fontSize:11, color:'#7B6B8D', background:'rgba(123,107,141,0.08)', padding:'2px 8px', borderRadius:10, whiteSpace:'nowrap' },
   typeBadge: { background:'rgba(59,111,160,0.1)', color:'#3B6FA0', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
   posBadge: { background:'rgba(123,107,141,0.1)', color:'#7B6B8D', padding:'3px 10px', borderRadius:12, fontSize:12, fontWeight:600, whiteSpace:'nowrap' },
-  dateSmall: { fontSize:11, color:'#aaa', marginBottom:3 },
   detailPanel: { background:'rgba(59,111,160,0.04)', borderRadius:10, padding:'14px 16px', border:'1px solid rgba(59,111,160,0.1)', marginTop:4 },
   detailGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:'10px 24px' },
   di: { display:'flex', flexDirection:'column', gap:3 },
